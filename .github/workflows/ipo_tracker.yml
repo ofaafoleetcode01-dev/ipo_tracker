@@ -1,0 +1,49 @@
+name: IPO Tracker Bot
+
+on:
+  schedule:
+    # Daily at 12:00 UTC = 5:30 PM IST (after IPO bidding window closes)
+    - cron: "0 12 * * 1-5"
+  workflow_dispatch: # allows manual trigger from GitHub UI
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Generate config.yaml from secrets
+        run: |
+          cat > config.yaml << 'YAML_END'
+          scraper:
+            base_url: "https://www.chittorgarh.com"
+            year: 2026
+
+          filters:
+            ipo_type: "mainboard"
+            only_last_day: true
+
+          alert_rules:
+            min_total_subscription: 1.0
+            min_qib_subscription: 0
+            min_retail_subscription: 0
+          YAML_END
+
+          # Append Telegram secrets (not hardcoded in the workflow)
+          echo "" >> config.yaml
+          echo "telegram:" >> config.yaml
+          echo "  bot_token: \"${{ secrets.TELEGRAM_BOT_TOKEN }}\"" >> config.yaml
+          echo "  chat_id: \"${{ secrets.TELEGRAM_CHAT_ID }}\"" >> config.yaml
+
+      - name: Run IPO Tracker
+        run: python -m src.main -v
