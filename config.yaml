@@ -1,0 +1,16 @@
+scraper:
+  base_url: "https://www.chittorgarh.com"
+  year: 2026
+
+filters:
+  ipo_type: "mainboard"        # mainboard only (skip SME)
+  only_last_day: true          # only IPOs closing today
+
+alert_rules:
+  min_total_subscription: 1.0  # minimum total subscription multiplier (x)
+  min_qib_subscription: 0      # minimum QIB subscription (x), 0 = no filter
+  min_retail_subscription: 0   # minimum Retail subscription (x), 0 = no filter
+
+telegram:
+  bot_token: "YOUR_BOT_TOKEN_HERE"   # from @BotFather
+  chat_id: "YOUR_CHAT_ID_HERE"       # your Telegram user/group chat ID
