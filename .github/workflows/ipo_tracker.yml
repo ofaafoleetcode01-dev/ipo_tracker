@@ -2,9 +2,19 @@ name: IPO Tracker Bot
 
 on:
   schedule:
-    # Daily at 12:00 UTC = 5:30 PM IST (after IPO bidding window closes)
-    - cron: "0 12 * * 1-5"
-  workflow_dispatch: # allows manual trigger from GitHub UI
+    - cron: "30 4 * * 1-5"   # 10:00 AM IST — morning check
+    - cron: "30 9 * * 1-5"   # 3:00 PM IST  — subscription report
+    - cron: "0 10 * * 1-5"   # 3:30 PM IST  — subscription report
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Run mode"
+        required: true
+        default: "report"
+        type: choice
+        options:
+          - report
+          - morning
 
 jobs:
   run-bot:
@@ -31,19 +41,29 @@ jobs:
 
           filters:
             ipo_type: "mainboard"
-            only_last_day: false
+            only_last_day: true
 
           alert_rules:
-            min_total_subscription: 1.0
+            min_total_subscription: 10.0
             min_qib_subscription: 0
             min_retail_subscription: 0
           YAML_END
 
-          # Append Telegram secrets (not hardcoded in the workflow)
           echo "" >> config.yaml
           echo "telegram:" >> config.yaml
           echo "  bot_token: \"${{ secrets.TELEGRAM_BOT_TOKEN }}\"" >> config.yaml
           echo "  chat_id: \"${{ secrets.TELEGRAM_CHAT_ID }}\"" >> config.yaml
 
+      - name: Determine run mode
+        id: mode
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "flag=${{ github.event.inputs.mode == 'morning' && '--morning' || '' }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event.schedule }}" = "30 4 * * 1-5" ]; then
+            echo "flag=--morning" >> "$GITHUB_OUTPUT"
+          else
+            echo "flag=" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Run IPO Tracker
-        run: python -m src.main -v
+        run: python -m src.main -v ${{ steps.mode.outputs.flag }}
