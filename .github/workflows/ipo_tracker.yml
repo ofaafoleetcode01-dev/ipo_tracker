@@ -31,7 +31,7 @@ jobs:
 
           filters:
             ipo_type: "mainboard"
-            only_last_day: true
+            only_last_day: false
 
           alert_rules:
             min_total_subscription: 1.0
