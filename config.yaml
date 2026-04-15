@@ -1,4 +1,5 @@
 scraper:
+  source: "CHITTORGARH"
   base_url: "https://www.chittorgarh.com"
   year: 2026
 
@@ -11,6 +12,8 @@ alert_rules:
   min_qib_subscription: 0      # minimum QIB subscription (x), 0 = no filter
   min_retail_subscription: 0   # minimum Retail subscription (x), 0 = no filter
 
-telegram:
-  bot_token: "YOUR_BOT_TOKEN_HERE"   # from @BotFather
-  chat_id: "YOUR_CHAT_ID_HERE"       # your Telegram user/group chat ID
+aws:
+  account_id: "357803939998"
+  region_name: "ap-south-1"
+  secret_name: "prod/IpoTracker/OFAAFO_TELEGRAM_GROUP"
+  lambda_arn: "arn:aws:lambda:ap-south-1:357803939998:function:TelegramBot1"

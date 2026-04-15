@@ -51,10 +51,16 @@ class IPOSubscription:
 @dataclass
 class AlertMessage:
     """A formatted alert ready to be sent."""
+    def __init__(self, ipos: list[IPOSubscription]):
+        self.today = date.today()    # TODO: Has timezone issues
+        self.today_str = self.today.strftime("%d %b %Y")
+        self.ipos: list[IPOSubscription] = ipos
+        self.closing_today = [ipo for ipo in self.ipos if ipo.close_date == self.today]
 
-    ipos: list[IPOSubscription] = field(default_factory=list)
+    def format(self, is_morning: bool = False) -> str:
+        return self.default() if not is_morning else self.morning_message()
 
-    def format(self) -> str:
+    def default(self) -> str:
         if not self.ipos:
             return ""
 
@@ -67,3 +73,23 @@ class AlertMessage:
             parts.append(separator)
 
         return "\n".join(parts)
+
+    def morning_message(self) -> str:
+        if self.closing_today:
+            names = "\n".join(f"  • {ipo.name}" for ipo in self.closing_today)
+            msg = (
+                f"*Good Morning! IPO Alert for {self.today_str}*\n"
+                f"{'─' * 30}\n\n"
+                f"*{len(self.closing_today)} IPO(s) closing today:*\n"
+                f"{names}\n\n"
+                f"Subscription reports coming at *3:00 PM* and *3:30 PM* IST.\n"
+                f"Buckle up — it's going to be an exciting day!"
+            )
+        else:
+            msg = (
+                f"*Good Morning! IPO Update for {self.today_str}*\n"
+                f"{'─' * 30}\n\n"
+                f"No mainboard IPOs closing today.\n"
+                f"Enjoy your day — we'll keep watching!"
+            )
+        return msg

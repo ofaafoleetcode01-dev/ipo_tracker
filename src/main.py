@@ -8,143 +8,115 @@ from pathlib import Path
 
 import yaml
 
-from src.models import AlertMessage
-from src.notifier import send_telegram, send_telegram_text
-from src.rules import apply_filters
-from src.scraper import fetch_mainboard_ipos, scrape_ipos
+from src.models import AlertMessage, IPOSubscription
+from src.ipo_scrapers.ipo_scrapers import get_scraper
+from src.telegram_bot import TelegramBot
 
 logger = logging.getLogger("ipo_tracker")
 
-_DEFAULT_CONFIG = Path(__file__).resolve().parent.parent / "config.yaml"
+class IPOTrackerMain(object):
+    _DEFAULT_CONFIG = Path(__file__).resolve().parent.parent / "config.yaml"
 
+    def _load_config(self, path: Path) -> dict:
+        with open(path) as f:
+            return yaml.safe_load(f)
 
-def _setup_logging(verbose: bool = False) -> None:
-    level = logging.DEBUG if verbose else logging.INFO
-    fmt = "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
-    logging.basicConfig(level=level, format=fmt, stream=sys.stdout)
+    def _apply_filters(self, ipos: list[IPOSubscription], config: dict) -> list[IPOSubscription]:
+        """Apply all configured filters and return only the IPOs that pass."""
+        filters = config.get("filters", {})
+        alert_rules = config.get("alert_rules", {})
 
+        filtered = ipos
 
-def _load_config(path: Path) -> dict:
-    with open(path) as f:
-        return yaml.safe_load(f)
+        if filters.get("ipo_type", "").lower() == "mainboard":
+            before = len(filtered)
+            filtered = [ipo for ipo in filtered if ipo.is_mainboard]
+            logger.info("Mainboard filter: %d -> %d IPOs", before, len(filtered))
 
+        if filters.get("only_last_day", True):
+            today = date.today()
+            before = len(filtered)
+            filtered = [ipo for ipo in filtered if ipo.close_date == today]
+            logger.info(
+                "Last-day filter (today=%s): %d -> %d IPOs",
+                today.isoformat(), before, len(filtered),
+            )
 
-def run(config: dict, dry_run: bool = False) -> None:
-    logger.info("Scraping mainboard IPO subscription data from chittorgarh.com ...")
-    all_ipos = scrape_ipos(config)
+        min_total = alert_rules.get("min_total_subscription", 0)
+        if min_total > 0:
+            before = len(filtered)
+            filtered = [ipo for ipo in filtered if ipo.total_subscription >= min_total]
+            logger.info("Total subscription >= %.1fx: %d -> %d IPOs", min_total, before, len(filtered))
 
-    if not all_ipos:
-        logger.info("No IPOs found. Nothing to do.")
-        return
+        min_qib = alert_rules.get("min_qib_subscription", 0)
+        if min_qib > 0:
+            before = len(filtered)
+            filtered = [ipo for ipo in filtered if ipo.qib_subscription >= min_qib]
+            logger.info("QIB subscription >= %.1fx: %d -> %d IPOs", min_qib, before, len(filtered))
 
-    logger.info("Found %d mainboard IPOs total. Applying filters ...", len(all_ipos))
-    matched = apply_filters(all_ipos, config)
+        min_retail = alert_rules.get("min_retail_subscription", 0)
+        if min_retail > 0:
+            before = len(filtered)
+            filtered = [ipo for ipo in filtered if ipo.retail_subscription >= min_retail]
+            logger.info("Retail subscription >= %.1fx: %d -> %d IPOs", min_retail, before, len(filtered))
 
-    if not matched:
-        logger.info("No IPOs matched the alert rules. No notification sent.")
-        return
+        return filtered
 
-    logger.info("%d IPO(s) matched alert rules:", len(matched))
-    for ipo in matched:
-        logger.info("  %s — Total: %.2fx", ipo.name, ipo.total_subscription)
-
-    alert = AlertMessage(ipos=matched)
-
-    if dry_run:
-        print("\n--- DRY RUN: message that would be sent ---")
-        print(alert.format())
-        print("---")
-        return
-
-    send_telegram(alert, config)
-
-
-def morning_check(config: dict, dry_run: bool = False) -> None:
-    """Quick morning check: which IPOs are closing today?
-
-    Sends a heads-up message listing today's closing IPOs, or a
-    'nothing today' message if there are none.  Only reads the
-    dashboard — no per-IPO detail scraping needed.
-    """
-    logger.info("Running morning check ...")
-    base_url = config["scraper"]["base_url"]
-    year = config["scraper"]["year"]
-    today = date.today()
-    today_str = today.strftime("%d %b %Y")
-
-    ipos_meta = fetch_mainboard_ipos(base_url, year)
-    closing_today = [ipo for ipo in ipos_meta if ipo.get("close_date") == today]
-
-    if closing_today:
-        names = "\n".join(f"  • {ipo['name']}" for ipo in closing_today)
-        msg = (
-            f"*Good Morning! IPO Alert for {today_str}*\n"
-            f"{'─' * 30}\n\n"
-            f"*{len(closing_today)} IPO(s) closing today:*\n"
-            f"{names}\n\n"
-            f"Subscription reports coming at *3:00 PM* and *3:30 PM* IST.\n"
-            f"Buckle up — it's going to be an exciting day!"
+    def _setup_parser(self):
+        parser = argparse.ArgumentParser(description="Indian IPO Subscription Tracker Bot")
+        parser.add_argument(
+            "--dry-run",
+            action="store_false",
+            help="Scrape and filter but print message instead of sending via Telegram",
         )
-    else:
-        msg = (
-            f"*Good Morning! IPO Update for {today_str}*\n"
-            f"{'─' * 30}\n\n"
-            f"No mainboard IPOs closing today.\n"
-            f"Enjoy your day — we'll keep watching!"
+        parser.add_argument(
+            "--skip-date-filter",
+            action="store_true",
+            help="Ignore the 'only_last_day' filter (useful for testing)",
         )
+        parser.add_argument(
+            "--morning",
+            action="store_true",
+            help="Run the morning check (heads-up about today's closing IPOs)",
+        )
+        parser.add_argument(
+            "--debug",
+            action="store_true",
+            help="Enable debug logging",
+        )
+        return parser
 
-    if dry_run:
-        print("\n--- DRY RUN: morning message ---")
-        print(msg)
-        print("---")
-        return
+    def main(self) -> None:
+        parser = self._setup_parser()
+        args = parser.parse_args()
 
-    send_telegram_text(msg, config)
+        log_level = "DEBUG" if not args.debug else "INFO"
+        logging.basicConfig(level=log_level, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s", stream=sys.stdout)
 
+        config = self._load_config(self._DEFAULT_CONFIG)
+        scraper = get_scraper(config)
+        telegram_bot = TelegramBot(config)
+        today = date.today()    # TODO: Has timezone issues
+        today_str = today.strftime("%d %b %Y")
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Indian IPO Subscription Tracker Bot")
-    parser.add_argument(
-        "-c", "--config",
-        type=Path,
-        default=_DEFAULT_CONFIG,
-        help="Path to config.yaml (default: %(default)s)",
-    )
-    parser.add_argument(
-        "-v", "--verbose",
-        action="store_true",
-        help="Enable debug logging",
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Scrape and filter but print message instead of sending via Telegram",
-    )
-    parser.add_argument(
-        "--skip-date-filter",
-        action="store_true",
-        help="Ignore the 'only_last_day' filter (useful for testing)",
-    )
-    parser.add_argument(
-        "--morning",
-        action="store_true",
-        help="Run the morning check (heads-up about today's closing IPOs)",
-    )
-    args = parser.parse_args()
+        all_ipos: list[IPOSubscription] = scraper.scrape_ipos()
+        matched = self._apply_filters(all_ipos, config)   # Keeping this for now
+        closing_today = [ipo for ipo in all_ipos if ipo.close_date == today]
 
-    _setup_logging(args.verbose)
+        if not all_ipos:
+            logger.info("No IPOs found. Nothing to do.")
+            return
+        
+        alert = AlertMessage(ipos=all_ipos)
 
-    config = _load_config(args.config)
-
-    if args.morning:
-        morning_check(config, dry_run=args.dry_run)
-        return
-
-    if args.skip_date_filter:
-        config.setdefault("filters", {})["only_last_day"] = False
-
-    run(config, dry_run=args.dry_run)
-
+        if args.dry_run:
+            print("\n--- DRY RUN: message that would be sent ---")
+            print(alert.format(is_morning = args.morning))
+            print("---")
+            return
+        else:
+            telegram_bot.send_telegram_message(alert.format(is_morning = args.morning))
+        
 
 if __name__ == "__main__":
-    main()
+    IPOTrackerMain().main()
