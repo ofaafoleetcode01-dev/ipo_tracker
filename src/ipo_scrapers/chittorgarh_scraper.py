@@ -114,7 +114,13 @@ class ChittorgarhScraper(object):
         if len(parts) >= 3:
             return parts[-2], parts[-1]
         return "", ""
-
+    
+    def _is_reit_or_invit(self, name: str, slug: str) -> bool:
+        """Return True if the IPO is actually a REIT or InvIT, not a regular IPO."""
+        
+        _REIT_INVIT_KEYWORDS = ["investment trust", "invit", "reit"]
+        combined = f"{name} {slug}".lower()
+        return any(kw in combined for kw in _REIT_INVIT_KEYWORDS)
 
     def _fetch_mainboard_ipos(self, base_url: str, year: int) -> list[dict]:
         """Fetch the list of mainboard IPOs from the dashboard.
@@ -149,6 +155,10 @@ class ChittorgarhScraper(object):
                 continue
 
             name = link.get_text(strip=True)
+
+            if self._is_reit_or_invit(name, slug):
+                logger.info("Skipping REIT/InvIT: %s", name)
+                continue
 
             spans = row.find_all("span")
             close_date = None
