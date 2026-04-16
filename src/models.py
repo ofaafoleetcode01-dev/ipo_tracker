@@ -4,6 +4,19 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Optional
 
+@dataclass
+class IPOTrackerMainInput:
+    """Represents the input object to be sent to IPOTrackerMain.main()"""
+    debug: bool = False
+    morning: bool = False
+    skip_date_filter: bool = False
+    dry_run: bool = False
+
+    def build_from_args(self, args: dict):
+        self.debug = args["debug"]
+        self.morning = args["morning"]
+        self.skip_date_filter = args["skip_date_filter"]
+        self.dry_run = args["dry_run"]
 
 @dataclass
 class IPOSubscription:

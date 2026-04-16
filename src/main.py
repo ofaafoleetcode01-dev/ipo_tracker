@@ -8,7 +8,7 @@ from pathlib import Path
 
 import yaml
 
-from src.models import AlertMessage, IPOSubscription
+from src.models import AlertMessage, IPOSubscription, IPOTrackerMainInput
 from src.ipo_scrapers.ipo_scrapers import get_scraper
 from src.telegram_bot import TelegramBot
 
@@ -62,7 +62,37 @@ class IPOTrackerMain(object):
 
         return filtered
 
-    def _setup_parser(self):
+    def main(self, args: IPOTrackerMainInput) -> None:
+        log_level = "DEBUG" if not args.debug else "INFO"
+        logging.basicConfig(level=log_level, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s", stream=sys.stdout)
+        logger.info(f"Received args: {args}")
+
+        config = self._load_config(self._DEFAULT_CONFIG)
+        scraper = get_scraper(config)
+        telegram_bot = TelegramBot(config)
+        today = date.today()    # TODO: Has timezone issues
+
+        all_ipos: list[IPOSubscription] = scraper.scrape_ipos()
+        matched = self._apply_filters(all_ipos, config)   # Keeping this for now
+        closing_today = [ipo for ipo in all_ipos if ipo.close_date == today]
+
+        if not all_ipos:
+            logger.info("No IPOs found. Nothing to do.")
+            return
+        
+        alert = AlertMessage(ipos=all_ipos)
+
+        if args.dry_run:
+            print("\n--- DRY RUN: message that would be sent ---")
+            print(alert.format(is_morning = args.morning))
+            print("---")
+            return
+        else:
+            telegram_bot.send_telegram_message(alert.format(is_morning = args.morning))
+            print("Telegram notification sent!")
+        
+
+def setup_parser():
         parser = argparse.ArgumentParser(description="Indian IPO Subscription Tracker Bot")
         parser.add_argument(
             "--dry-run",
@@ -86,37 +116,7 @@ class IPOTrackerMain(object):
         )
         return parser
 
-    def main(self) -> None:
-        parser = self._setup_parser()
-        args = parser.parse_args()
-
-        log_level = "DEBUG" if not args.debug else "INFO"
-        logging.basicConfig(level=log_level, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s", stream=sys.stdout)
-
-        config = self._load_config(self._DEFAULT_CONFIG)
-        scraper = get_scraper(config)
-        telegram_bot = TelegramBot(config)
-        today = date.today()    # TODO: Has timezone issues
-        today_str = today.strftime("%d %b %Y")
-
-        all_ipos: list[IPOSubscription] = scraper.scrape_ipos()
-        matched = self._apply_filters(all_ipos, config)   # Keeping this for now
-        closing_today = [ipo for ipo in all_ipos if ipo.close_date == today]
-
-        if not all_ipos:
-            logger.info("No IPOs found. Nothing to do.")
-            return
-        
-        alert = AlertMessage(ipos=all_ipos)
-
-        if args.dry_run:
-            print("\n--- DRY RUN: message that would be sent ---")
-            print(alert.format(is_morning = args.morning))
-            print("---")
-            return
-        else:
-            telegram_bot.send_telegram_message(alert.format(is_morning = args.morning))
-        
-
 if __name__ == "__main__":
-    IPOTrackerMain().main()
+    parser = setup_parser()
+    args = IPOTrackerMainInput().build_from_args(vars(parser.parse_args()))
+    IPOTrackerMain().main(args)

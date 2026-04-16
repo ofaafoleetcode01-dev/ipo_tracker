@@ -4,9 +4,6 @@ import subprocess
 import sys
 import zipfile
 
-# -----------------------------
-# Paths (always relative to script location)
-# -----------------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 BUILD_DIR = os.path.join(BASE_DIR, "build")
@@ -20,42 +17,65 @@ CONFIG_FILE = os.path.join(BASE_DIR, "config.yaml")
 OUTPUT_ZIP = os.path.join(DIST_DIR, "lambda_function.zip")
 
 
-# -----------------------------
-# Helper
-# -----------------------------
 def run(cmd):
     print(f"> {' '.join(cmd)}")
     subprocess.check_call(cmd)
 
 
 # -----------------------------
-# Clean previous artifacts
+# Parse args
 # -----------------------------
-def clean():
-    print("Cleaning build artifacts...")
+def parse_args():
+    mode = "full"
+    no_dist = False
 
-    if os.path.exists(BUILD_DIR):
-        shutil.rmtree(BUILD_DIR)
+    for arg in sys.argv[1:]:
+        if arg.lower() == "fast":
+            mode = "fast"
+        elif arg == "--no-dist":
+            no_dist = True
 
-    if os.path.exists(DIST_DIR):
-        shutil.rmtree(DIST_DIR)
+    return mode, no_dist
 
 
 # -----------------------------
-# Setup directories
+# Clean
 # -----------------------------
-def setup_dirs():
+def clean(full=True, skip_dist=False):
+    if full:
+        print("Full clean...")
+        if os.path.exists(BUILD_DIR):
+            shutil.rmtree(BUILD_DIR)
+    else:
+        print("Fast mode: keeping build/")
+
+    if not skip_dist:
+        if os.path.exists(DIST_DIR):
+            print("Cleaning dist/...")
+            shutil.rmtree(DIST_DIR)
+    else:
+        print("Skipping dist cleanup (--no-dist)")
+
+
+# -----------------------------
+# Setup dirs
+# -----------------------------
+def setup_dirs(skip_dist=False):
     os.makedirs(BUILD_DIR, exist_ok=True)
-    os.makedirs(DIST_DIR, exist_ok=True)
+    if not skip_dist:
+        os.makedirs(DIST_DIR, exist_ok=True)
 
 
 # -----------------------------
-# Install dependencies
+# Dependencies
 # -----------------------------
-def install_dependencies():
+def install_dependencies(skip=False):
+    if skip:
+        print("Skipping dependency install (fast mode)")
+        return
+
     if os.path.exists(REQUIREMENTS):
-        print("Installing dependencies into build/...")
-
+        print("Installing dependencies...")
         run([
             sys.executable,
             "-m",
@@ -66,72 +86,63 @@ def install_dependencies():
             "-t",
             BUILD_DIR
         ])
-    else:
-        print("No requirements.txt found, skipping dependencies.")
 
 
 # -----------------------------
-# Copy application files
+# Copy code
 # -----------------------------
 def copy_source():
     print("Copying source files...")
 
-    # Lambda entry point (must be root of zip)
-    if os.path.exists(ENTRY_FILE):
-        shutil.copy(ENTRY_FILE, BUILD_DIR)
-    else:
-        raise FileNotFoundError("lambda_function.py not found in project root")
+    shutil.copy(ENTRY_FILE, BUILD_DIR)
 
-    # src folder (preserve imports like: from src.main import ...)
-    if os.path.exists(SRC_DIR):
-        shutil.copytree(
-            SRC_DIR,
-            os.path.join(BUILD_DIR, "src"),
-            dirs_exist_ok=True
-        )
-    else:
-        print("Warning: src/ not found")
+    target_src = os.path.join(BUILD_DIR, "src")
+    if os.path.exists(target_src):
+        shutil.rmtree(target_src)
 
-    # config.yaml (root level in Lambda)
+    shutil.copytree(SRC_DIR, target_src)
+
     if os.path.exists(CONFIG_FILE):
-        print("Copying config.yaml...")
         shutil.copy(CONFIG_FILE, BUILD_DIR)
-    else:
-        print("Warning: config.yaml not found")
 
 
 # -----------------------------
-# Create Lambda deployment ZIP
+# Zip
 # -----------------------------
-def create_zip():
-    print(f"Creating deployment package: {OUTPUT_ZIP}")
+def create_zip(skip=False):
+    if skip:
+        print("Skipping ZIP creation (--no-dist)")
+        return
+
+    print(f"Creating ZIP: {OUTPUT_ZIP}")
 
     with zipfile.ZipFile(OUTPUT_ZIP, "w", zipfile.ZIP_DEFLATED) as z:
         for root, _, files in os.walk(BUILD_DIR):
             for file in files:
                 full_path = os.path.join(root, file)
-
-                # IMPORTANT: Lambda requires root-relative paths
                 arcname = os.path.relpath(full_path, BUILD_DIR)
-
                 z.write(full_path, arcname)
 
-    print(f"✅ ZIP created: {OUTPUT_ZIP}")
+    print("✅ ZIP ready")
 
 
 # -----------------------------
-# Build pipeline
+# Main
 # -----------------------------
 def main():
-    clean()
-    setup_dirs()
-    install_dependencies()
+    mode, no_dist = parse_args()
+    fast_mode = mode == "fast"
+
+    print(f"Mode: {mode.upper()}")
+    print(f"Skip dist: {no_dist}")
+
+    clean(full=not fast_mode, skip_dist=no_dist)
+    setup_dirs(skip_dist=no_dist)
+    install_dependencies(skip=fast_mode)
     copy_source()
-    create_zip()
+    create_zip(skip=no_dist)
 
     print("\n🎉 Build complete!")
-    print(f"📦 Upload this file to AWS Lambda:")
-    print(f"   {OUTPUT_ZIP}")
 
 
 if __name__ == "__main__":

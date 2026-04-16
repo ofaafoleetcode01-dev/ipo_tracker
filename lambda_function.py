@@ -8,8 +8,12 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(na
 logger = logging.getLogger("ipo_tracker")
 
 from src.main import IPOTrackerMain
+from src.models import IPOTrackerMainInput
 
 def handler(event, context):
     """AWS Lambda entry point. Triggered by EventBridge on a daily schedule."""
     logger.info("Lambda invoked. Event: %s", json.dumps(event))
-    return IPOTrackerMain().main()
+    args = IPOTrackerMainInput()
+    args.morning = bool(event.get("morning", False))
+    args.dry_run = bool(event.get("dry_run", False))
+    return IPOTrackerMain().main(args)
