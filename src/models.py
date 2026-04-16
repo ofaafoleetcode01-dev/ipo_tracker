@@ -4,6 +4,19 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Optional
 
+@dataclass
+class IPOTrackerMainInput:
+    """Represents the input object to be sent to IPOTrackerMain.main()"""
+    debug: bool = False
+    morning: bool = False
+    skip_date_filter: bool = False
+    dry_run: bool = False
+
+    def build_from_args(self, args: dict):
+        self.debug = bool(args["debug"])
+        self.morning = bool(args["morning"])
+        self.skip_date_filter = bool(args["skip_date_filter"])
+        self.dry_run = bool(args["dry_run"])
 
 @dataclass
 class IPOSubscription:
@@ -49,21 +62,47 @@ class IPOSubscription:
 
 
 @dataclass
-class AlertMessage:
+class IPOAlertMessage:
     """A formatted alert ready to be sent."""
+    def __init__(self, ipos: list[IPOSubscription]):
+        self.today = date.today()    # TODO: Has timezone issues
+        self.today_str = self.today.strftime("%d %b %Y")
+        self.ipos: list[IPOSubscription] = ipos
+        self.closing_today = [ipo for ipo in self.ipos if ipo.close_date == self.today]
 
-    ipos: list[IPOSubscription] = field(default_factory=list)
+    def format(self, is_morning: bool = False) -> str:
+        return self.default() if not is_morning else self.morning_message()
 
-    def format(self) -> str:
+    def default(self) -> str:
         if not self.ipos:
             return ""
 
-        header = "IPO Subscription Alert"
+        header = "IPO Alert"
         separator = "─" * 30
         parts = [header, separator]
 
-        for ipo in self.ipos:
+        for ipo in self.closing_today:
             parts.append(ipo.summary())
             parts.append(separator)
 
         return "\n".join(parts)
+
+    def morning_message(self) -> str:
+        if self.closing_today:
+            names = "\n".join(f"  • {ipo.name}" for ipo in self.closing_today)
+            msg = (
+                f"*Good Morning! IPOs for {self.today_str}*\n"
+                f"{'─' * 30}\n\n"
+                f"*{len(self.closing_today)} IPO(s) closing today:*\n"
+                f"{names}\n\n"
+                f"Subscription reports coming at *3:00 PM* and *3:30 PM* IST.\n"
+                f"Buckle up — it's going to be an exciting day!"
+            )
+        else:
+            msg = (
+                f"*Good Morning! IPOs for {self.today_str}*\n"
+                f"{'─' * 30}\n\n"
+                f"No IPOs closing today.\n"
+                f"Enjoy your day — we'll keep watching!"
+            )
+        return msg
