@@ -81,7 +81,7 @@ class IPOAlertMessage:
         separator = "─" * 30
         parts = [header, separator]
 
-        for ipo in self.ipos:
+        for ipo in self.closing_today:
             parts.append(ipo.summary())
             parts.append(separator)
 
