@@ -14,4 +14,4 @@ alert_rules:
 
 aws:
   region_name: "ap-south-1"
-  secret_name: "prod/IpoTracker/OFAAFO_TELEGRAM_GROUP_1"
+  secret_name: "prod/IpoTracker/OFAAFO_TELEGRAM_GROUP_2"
