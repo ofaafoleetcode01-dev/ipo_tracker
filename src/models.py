@@ -13,10 +13,10 @@ class IPOTrackerMainInput:
     dry_run: bool = False
 
     def build_from_args(self, args: dict):
-        self.debug = args["debug"]
-        self.morning = args["morning"]
-        self.skip_date_filter = args["skip_date_filter"]
-        self.dry_run = args["dry_run"]
+        self.debug = bool(args["debug"])
+        self.morning = bool(args["morning"])
+        self.skip_date_filter = bool(args["skip_date_filter"])
+        self.dry_run = bool(args["dry_run"])
 
 @dataclass
 class IPOSubscription:
@@ -62,7 +62,7 @@ class IPOSubscription:
 
 
 @dataclass
-class AlertMessage:
+class IPOAlertMessage:
     """A formatted alert ready to be sent."""
     def __init__(self, ipos: list[IPOSubscription]):
         self.today = date.today()    # TODO: Has timezone issues
@@ -77,7 +77,7 @@ class AlertMessage:
         if not self.ipos:
             return ""
 
-        header = "IPO Subscription Alert"
+        header = "IPO Alert"
         separator = "─" * 30
         parts = [header, separator]
 
@@ -91,7 +91,7 @@ class AlertMessage:
         if self.closing_today:
             names = "\n".join(f"  • {ipo.name}" for ipo in self.closing_today)
             msg = (
-                f"*Good Morning! IPO Alert for {self.today_str}*\n"
+                f"*Good Morning! IPOs for {self.today_str}*\n"
                 f"{'─' * 30}\n\n"
                 f"*{len(self.closing_today)} IPO(s) closing today:*\n"
                 f"{names}\n\n"
@@ -100,9 +100,9 @@ class AlertMessage:
             )
         else:
             msg = (
-                f"*Good Morning! IPO Update for {self.today_str}*\n"
+                f"*Good Morning! IPOs for {self.today_str}*\n"
                 f"{'─' * 30}\n\n"
-                f"No mainboard IPOs closing today.\n"
+                f"No IPOs closing today.\n"
                 f"Enjoy your day — we'll keep watching!"
             )
         return msg

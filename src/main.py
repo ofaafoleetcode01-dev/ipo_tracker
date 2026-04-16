@@ -8,7 +8,7 @@ from pathlib import Path
 
 import yaml
 
-from src.models import AlertMessage, IPOSubscription, IPOTrackerMainInput
+from src.models import IPOAlertMessage, IPOSubscription, IPOTrackerMainInput
 from src.ipo_scrapers.ipo_scrapers import get_scraper
 from src.telegram_bot import TelegramBot
 
@@ -80,7 +80,7 @@ class IPOTrackerMain(object):
             logger.info("No IPOs found. Nothing to do.")
             return
         
-        alert = AlertMessage(ipos=all_ipos)
+        alert = IPOAlertMessage(ipos=all_ipos)
 
         if args.dry_run:
             print("\n--- DRY RUN: message that would be sent ---")
