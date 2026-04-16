@@ -13,7 +13,5 @@ alert_rules:
   min_retail_subscription: 0   # minimum Retail subscription (x), 0 = no filter
 
 aws:
-  account_id: "357803939998"
   region_name: "ap-south-1"
-  secret_name: "prod/IpoTracker/OFAAFO_TELEGRAM_GROUP"
-  lambda_arn: "arn:aws:lambda:ap-south-1:357803939998:function:TelegramBot1"
+  secret_name: "prod/IpoTracker/OFAAFO_TELEGRAM_GROUP_1"

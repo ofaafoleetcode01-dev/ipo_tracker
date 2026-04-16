@@ -96,7 +96,7 @@ def setup_parser():
         parser = argparse.ArgumentParser(description="Indian IPO Subscription Tracker Bot")
         parser.add_argument(
             "--dry-run",
-            action="store_false",
+            action="store_true",
             help="Scrape and filter but print message instead of sending via Telegram",
         )
         parser.add_argument(

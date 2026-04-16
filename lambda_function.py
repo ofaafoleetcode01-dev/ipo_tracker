@@ -16,4 +16,6 @@ def handler(event, context):
     args = IPOTrackerMainInput()
     args.morning = bool(event.get("morning", False))
     args.dry_run = bool(event.get("dry_run", False))
+    args.debug = bool(event.get("debug", False))
+    args.skip_date_filter = bool(event.get("skip_date_filter", False))
     return IPOTrackerMain().main(args)
